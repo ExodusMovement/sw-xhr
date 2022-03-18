@@ -4,6 +4,14 @@ export default class XMLHttpRequestPolyfill extends XMLHttpRequestPolyfilleEvent
   private aborted: boolean = false;
   private request?: Request;
   private responseHeaders?: Headers;
+  private stream?: ReadableStreamDefaultReader | null;
+  private textDecoder: TextDecoder;
+
+  constructor() {
+    super();
+
+    this.textDecoder = new TextDecoder();
+  }
 
   public abort() {
     this.aborted = true;
@@ -55,9 +63,6 @@ export default class XMLHttpRequestPolyfill extends XMLHttpRequestPolyfilleEvent
       });
     }
 
-    this.readyState = this.LOADING;
-    this.onreadystatechange(new Event('readystatechange'));
-
     fetch(this.request)
       .then(response => {
         if (this.aborted) {
@@ -70,16 +75,63 @@ export default class XMLHttpRequestPolyfill extends XMLHttpRequestPolyfilleEvent
         this.status = response.status;
         this.statusText = response.statusText;
         this.responseHeaders = response.headers;
-        return response.text();
-      })
-      .then(text => {
-        if (this.aborted) {
-          return;
+
+        this.readyState = this.LOADING;
+        this.onreadystatechange(new Event('readystatechange'));
+
+        if (!response.body) {
+          return this.handleError();
         }
 
-        this.responseText = text;
-        this.readyState = this.DONE;
-        this.onreadystatechange(new Event('readystatechange'));
+        this.stream = response.body.getReader();
+
+        this.responseText = '';
+
+        if (!this.stream) {
+          return this.handleError();
+        }
+
+        this.readStream();
       });
+  }
+  public readStream()  {
+    if (!this.stream) {
+      return;
+    }
+
+    this.stream.read().then((result) => {
+      if (result.value) {
+        const text = this.textDecoder.decode(
+          result.value || new Uint8Array(0), { stream: !result.done }
+        );
+        this.responseText += text;
+        this.onprogress(new Event('progress'));
+      }
+
+      if (result.done) {
+        this.handleFinish();
+      } else {
+        this.onreadystatechange(new Event('readystatechange'));
+        this.readStream();
+      }
+    }).catch(() => {
+      this.handleError();
+    });
+  }
+  public handleFinish() {
+    this.readyState = this.DONE;
+    this.stream = null;
+
+    this.onload(new Event('load'));
+    this.onloadend(new Event('loadend'));
+    this.onreadystatechange(new Event('readystatechange'));
+  }
+  public handleError() {
+    this.readyState = this.DONE;
+    this.stream = null;
+
+    this.onload(new Event('error'));
+    this.onloadend(new Event('loadend'));
+    this.onreadystatechange(new Event('readystatechange'));
   }
 }
