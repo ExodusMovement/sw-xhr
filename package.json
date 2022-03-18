@@ -1,7 +1,10 @@
 {
-  "name": "sw-xhr",
-  "version": "0.0.3",
+  "name": "@exodus/sw-xhr",
+  "version": "0.0.4",
   "description": "Polyfill XMLHttpRequest api with fetch",
+  "publishConfig": {
+    "access": "restricted"
+  },
   "main": "index.js",
   "scripts": {
     "prepublishOnly": "npm test && npm run build",
